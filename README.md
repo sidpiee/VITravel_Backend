@@ -248,6 +248,88 @@ Success: `200`
 
 Verification attempts are limited to 10 per IP per 15 minutes.
 
+### Forgot password
+
+```http
+POST /api/auth/forgot-password
+```
+
+Request body:
+
+```json
+{
+  "email": "student@example.com"
+}
+```
+
+The endpoint always returns a generic success message. If the email belongs to a
+user, the backend sends a six-digit OTP that expires after five minutes. OTP
+requests are limited to five per IP per 15 minutes.
+
+Success: `200`
+
+```json
+{
+  "message": "If the email is registered, a password-reset OTP has been sent."
+}
+```
+
+### Verify password-reset OTP
+
+```http
+POST /api/auth/verify-password-reset-otp
+```
+
+Request body:
+
+```json
+{
+  "email": "student@example.com",
+  "otp": "123456"
+}
+```
+
+Success: `200`
+
+```json
+{
+  "message": "OTP verified successfully",
+  "resetSessionToken": "<short-lived-token>",
+  "expiresIn": 600
+}
+```
+
+The reset session token is required for the next step. OTP verification is
+limited to five attempts per reset record and ten requests per IP per 15 minutes.
+
+### Reset password
+
+```http
+POST /api/auth/reset-password
+```
+
+Request body:
+
+```json
+{
+  "resetSessionToken": "<short-lived-token>",
+  "newPassword": "new-password"
+}
+```
+
+Success: `200`
+
+```json
+{
+  "message": "Password reset successfully. Please log in again."
+}
+```
+
+The reset session token expires after ten minutes and can be used only once.
+Successful password resets increment the user's `tokenVersion`, revoking existing
+cookie and bearer-token sessions. The frontend should redirect the user to login
+after receiving the success response.
+
 ### Register
 
 ```http

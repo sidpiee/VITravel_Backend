@@ -2,6 +2,7 @@ const userModel = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const otpAuth = require("../services/otpAuth.service");
+const passwordReset = require("../services/passwordReset.service");
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -86,6 +87,100 @@ async function verifyOTPController(req, res) {
     }
 }
 
+/**
+ * - Request a password-reset OTP
+ * - POST /api/auth/forgot-password
+ */
+async function forgotPasswordController(req, res) {
+    try {
+        const normalizedEmail = req.body.email?.trim().toLowerCase();
+
+        if (!normalizedEmail) {
+            return res.status(400).json({
+                message: "Email is required"
+            });
+        }
+
+        await passwordReset.requestPasswordReset(normalizedEmail);
+
+        return res.status(200).json({
+            message: "If the email is registered, a password-reset OTP has been sent."
+        });
+    } catch (error) {
+        console.error("Forgot-password error:", error);
+        return res.status(500).json({
+            message: "Unable to process password-reset request"
+        });
+    }
+}
+
+/**
+ * - Verify a password-reset OTP
+ * - POST /api/auth/verify-password-reset-otp
+ */
+async function verifyPasswordResetOtpController(req, res) {
+    try {
+        const normalizedEmail = req.body.email?.trim().toLowerCase();
+        const otp = req.body.otp?.toString().trim();
+
+        if (!normalizedEmail || !otp) {
+            return res.status(400).json({
+                message: "Email and OTP are required"
+            });
+        }
+
+        const resetSessionToken = await passwordReset.verifyPasswordResetOtp(
+            normalizedEmail,
+            otp
+        );
+
+        return res.status(200).json({
+            message: "OTP verified successfully",
+            resetSessionToken,
+            expiresIn: 10 * 60
+        });
+    } catch (error) {
+        if (error.statusCode === 400) {
+            return res.status(400).json({ message: error.message });
+        }
+
+        console.error("Password-reset OTP verification error:", error);
+        return res.status(500).json({
+            message: "Unable to verify password-reset OTP"
+        });
+    }
+}
+
+/**
+ * - Reset the password after OTP verification
+ * - POST /api/auth/reset-password
+ */
+async function resetPasswordController(req, res) {
+    try {
+        const { resetSessionToken, newPassword } = req.body;
+
+        if (!resetSessionToken || !newPassword) {
+            return res.status(400).json({
+                message: "Reset session token and new password are required"
+            });
+        }
+
+        await passwordReset.resetPassword(resetSessionToken, newPassword);
+
+        return res.status(200).json({
+            message: "Password reset successfully. Please log in again."
+        });
+    } catch (error) {
+        if (error.statusCode === 400) {
+            return res.status(400).json({ message: error.message });
+        }
+
+        console.error("Password-reset error:", error);
+        return res.status(500).json({
+            message: "Unable to reset password"
+        });
+    }
+}
 /** 
  * - user register controller
  * - POST /api/auth/register
@@ -276,6 +371,9 @@ async function logoutController(req, res) {
 module.exports = {
     sendOTPController,
     verifyOTPController,
+    forgotPasswordController,
+    verifyPasswordResetOtpController,
+    resetPasswordController,
     registerController,
     loginController,
     logoutController

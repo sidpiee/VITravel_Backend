@@ -23,6 +23,37 @@ const verifyOTPLimiter = rateLimit({
     }
 });
 
+// Password-reset requests and OTP guesses are stricter than registration OTP limits.
+const passwordResetLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        message: "Too many password-reset requests. Please try again later."
+    }
+});
+
+const passwordResetVerifyLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        message: "Too many OTP attempts. Please try again later."
+    }
+});
+
+const passwordResetCompleteLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        message: "Too many password-reset attempts. Please try again later."
+    }
+});
+
 // Limit login attempts
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -37,5 +68,8 @@ const loginLimiter = rateLimit({
 module.exports = {
     otpLimiter,
     verifyOTPLimiter,
+    passwordResetLimiter,
+    passwordResetVerifyLimiter,
+    passwordResetCompleteLimiter,
     loginLimiter
 };
