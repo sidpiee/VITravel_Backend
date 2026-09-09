@@ -6,6 +6,52 @@ const {
 
 const CHAT_TOKEN_TTL_SECONDS = 5 * 60;
 
+const issueChatToken = (userId) => {
+    if (!process.env.CHAT_TOKEN_SECRET) {
+        throw new Error("Chat service is not configured");
+    }
+
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const expiresAt = issuedAt + CHAT_TOKEN_TTL_SECONDS;
+    const chatToken = jwt.sign(
+        {
+            sub: userId,
+            scope: "chat",
+            iat: issuedAt,
+            exp: expiresAt
+        },
+        process.env.CHAT_TOKEN_SECRET,
+        {
+            audience: "ouechat"
+        }
+    );
+
+    return {
+        chatToken,
+        expiresAt: new Date(expiresAt * 1000).toISOString()
+    };
+};
+
+// Browser-facing session endpoint. The token identifies the authenticated
+// user only; OueChat performs ride membership checks per operation.
+const createUserChatSessionController = async (req, res) => {
+    try {
+        const userId = req.user._id.toString();
+        const session = issueChatToken(userId);
+
+        return res.status(200).json({
+            userId,
+            ...session
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: error.message
+        });
+    }
+};
+
+// Compatibility endpoint. It still verifies the requested ride before
+// issuing a session, but the token is no longer locked to that ride or role.
 const createChatSessionController = async (req, res) => {
     try {
         const { rideId } = req.params;
@@ -30,35 +76,15 @@ const createChatSessionController = async (req, res) => {
             });
         }
 
-        if (!process.env.CHAT_TOKEN_SECRET) {
-            return res.status(500).json({
-                message: "Chat service is not configured"
-            });
-        }
-
         const userId = req.user._id.toString();
-        const chatToken = jwt.sign(
-            {
-                sub: userId,
-                rideId,
-                role: membership.role
-            },
-            process.env.CHAT_TOKEN_SECRET,
-            {
-                audience: "ouechat",
-                expiresIn: CHAT_TOKEN_TTL_SECONDS
-            }
-        );
+        const session = issueChatToken(userId);
 
         return res.status(200).json({
             roomId: `ride:${rideId}`,
             rideId,
             userId,
             role: membership.role,
-            chatToken,
-            expiresAt: new Date(
-                Date.now() + CHAT_TOKEN_TTL_SECONDS * 1000
-            ).toISOString()
+            ...session
         });
     } catch (error) {
         return res.status(500).json({
@@ -99,6 +125,7 @@ const validateChatMembershipController = async (req, res) => {
 };
 
 module.exports = {
+    createUserChatSessionController,
     createChatSessionController,
     validateChatMembershipController
 };

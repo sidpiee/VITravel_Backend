@@ -5,8 +5,16 @@ const chatController = require("../controllers/chat.controller");
 
 const router = express.Router();
 
-// Browser-facing route. The ride backend decides whether the authenticated
-// user is the creator or a confirmed passenger before issuing a chat token.
+// Browser-facing route. The token is scoped to the authenticated user. OueChat
+// checks membership separately for every requested ride and operation.
+router.post(
+    "/session",
+    authMiddleware,
+    chatController.createUserChatSessionController
+);
+
+// Compatibility route. It still checks the requested ride before issuing a
+// session, but the token itself is not scoped to that ride or role.
 router.post(
     "/rides/:rideId/session",
     authMiddleware,

@@ -134,7 +134,8 @@ The current scripts are:
 ```json
 {
   "start": "node server.js",
-  "dev": "nodemon server.js"
+  "dev": "nodemon server.js",
+  "test": "node --test"
 }
 ```
 
@@ -660,31 +661,51 @@ only authenticates users, verifies ride membership, and issues chat tokens.
 ### Create a chat session
 
 ```http
-POST /api/chat/rides/:rideId/session
+POST /api/chat/session
 Authorization: Bearer <ride-app-jwt>
 ```
 
-The normal ride authentication middleware verifies the user, blacklist state,
-and token version. The chat membership service then allows only the ride
-creator or a user with a confirmed booking while the ride is active and in the
-future.
+The normal ride authentication middleware verifies the authenticated user,
+blacklist state, and token version. This endpoint issues a short-lived,
+user-scoped token. It does not require a ride ID because OueChat validates
+membership independently for every ride that the socket requests.
 
 Success: `200`
 
 ```json
 {
-  "roomId": "ride:665abc123456789012345678",
-  "rideId": "665abc123456789012345678",
   "userId": "665def123456789012345678",
-  "role": "creator",
   "chatToken": "<short-lived-jwt>",
   "expiresAt": "2027-08-01T05:35:00.000Z"
 }
 ```
 
-The chat token expires after five minutes and contains `sub`, `rideId`, and
-`role`. It is signed with `CHAT_TOKEN_SECRET` and uses the audience
-`ouechat`.
+The chat token expires after five minutes and contains the following claims:
+
+```json
+{
+  "sub": "<userId>",
+  "aud": "ouechat",
+  "scope": "chat",
+  "iat": "<issued timestamp>",
+  "exp": "<expiry timestamp>"
+}
+```
+
+It is signed with `CHAT_TOKEN_SECRET`. Never expose `CHAT_TOKEN_SECRET` to the
+frontend or place it in a `VITE_*` variable.
+
+The previous endpoint remains available temporarily for compatibility:
+
+```http
+POST /api/chat/rides/:rideId/session
+Authorization: Bearer <ride-app-jwt>
+```
+
+It still validates the requested ride before returning a session and retains
+the legacy response metadata, but its `chatToken` now uses the same
+user-scoped claims above and contains no ride ID or role. New frontend code
+should use `POST /api/chat/session`.
 
 The frontend uses `chatToken` to connect to OueChat through Socket.IO. The
 frontend must not call the membership endpoint below directly.
@@ -725,7 +746,7 @@ server-to-server communication. The two chat secrets must match between this
 backend and OueChat.
 
 For the complete OueChat Socket.IO contract and deployment instructions, see
-the OueChat repository's `server/README.md`.
+the OueChat repository's `README.md`.
 
 ## Authentication and security rules
 
@@ -737,6 +758,8 @@ the OueChat repository's `server/README.md`.
   revoked.
 - Blacklisted users are rejected by authentication and cannot issue chat
   sessions.
+- Chat sessions are user-scoped and short-lived. OueChat, rather than the
+  browser or the session token, decides whether the user may access each ride.
 - Passwords are stored hashed and excluded from normal user queries with
   `select: false`.
 - Never put `JWT_SECRET`, `MONGODB_URI`, Brevo credentials, or chat secrets in
@@ -792,5 +815,4 @@ chat token in a URL or persist it longer than needed.
 - The current ride routes use `/api/rides/ride` for creation and
   `/api/rides/rides/:id` for detail, update, and cancellation. Frontend code
   must use these exact paths.
-- There is no automated `test` script in `package.json`; the available scripts
-  are `dev` and `start`.
+- The automated tests use Node's built-in test runner with `npm test`.
